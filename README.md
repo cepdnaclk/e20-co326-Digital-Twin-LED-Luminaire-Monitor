@@ -1,4 +1,4 @@
-# Measuring Light Intensity in a Company Before It Dies
+# Digital Twin LED Luminaire Monitor
 
 This project uses Docker Compose to run the monitoring stack:
 
