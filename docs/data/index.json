@@ -1,5 +1,4 @@
 {
-  "title": "Anomaly Detection and Remaining Useful Life Prediction of Industrial LED Luminaires",
   "team": [
     {
       "name": "A.M.N.C. Bandara",
@@ -21,13 +20,6 @@
     {
       "name": "Prof. Kamalanath Samarakoon",
       "email": "kamalanath@eng.pdn.ac.lk"
-    }
-  ],
-  "media": [
-    {
-      "type": "youtube",
-      "title": "",
-      "url": "#"
     }
   ],
   "tags": ["Industrial network project", "Digital Twin", "Grafana", "TinyML"]
