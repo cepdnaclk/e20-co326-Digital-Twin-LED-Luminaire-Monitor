@@ -22,7 +22,7 @@
       "email": "kamalanath@eng.pdn.ac.lk"
     }
   ],
-  "tags": ["Industrial network project", "Digital Twin", "Grafana", "TinyML"],
+  "tags": ["Industrial network project", "Digital Twin", "Grafana", "Node-RED", "InfluxDB", "TinyML", "JavaScript"],
   "image":"cover_page.jpg",
   "thumbnail":"thumbnail.jpg"
 }
