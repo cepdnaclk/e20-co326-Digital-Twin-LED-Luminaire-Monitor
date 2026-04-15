@@ -3,11 +3,12 @@ import { useEffect, useMemo, useState } from "react";
 const API_URL = "http://localhost:4000";
 
 const postJson = async (path, payload) => {
-  await fetch(`${API_URL}${path}`, {
+  const res = await fetch(`${API_URL}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
+  return res.json();
 };
 
 function LineChart({ values, color, yLabel, xLabel, yUnit = "", precision = 0 }) {
@@ -103,6 +104,9 @@ function BarChart({ data, labels, colors, yLabel, yMax }) {
         return (
           <g key={labels[i]}>
             <rect x={x} y={y} width={barW} height={h} rx="4" fill={colors[i]} />
+            <text x={x + barW / 2} y={Math.max(M.top + 10, y - 4)} className="axis-text axis-text-center">
+              {Math.round(v)}
+            </text>
             <text x={x + barW / 2} y={H - 12} className="axis-text axis-text-center">
               {labels[i]}
             </text>
@@ -127,12 +131,46 @@ function arcPath(cx, cy, r, startDeg, endDeg) {
   return `M ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2}`;
 }
 
-function DialGauge({ title, value, min, max, unit = "", color = "#22c55e" }) {
+function lerp(a, b, t) {
+  return Math.round(a + (b - a) * t);
+}
+
+function gaugeColorFromPct(pct, scheme = "red-yellow-green") {
+  const p = Math.max(0, Math.min(1, pct));
+  const toRgb = (a, b, t) => `rgb(${lerp(a[0], b[0], t)}, ${lerp(a[1], b[1], t)}, ${lerp(a[2], b[2], t)})`;
+
+  if (scheme === "green-yellow-red") {
+    const green = [34, 197, 94];
+    const yellow = [250, 204, 21];
+    const red = [239, 68, 68];
+    if (p <= 0.5) {
+      return toRgb(green, yellow, p / 0.5);
+    }
+    return toRgb(yellow, red, (p - 0.5) / 0.5);
+  }
+
+  if (scheme === "dark-yellow") {
+    const dark = [35, 39, 58];
+    const yellowSoft = [245, 198, 72];
+    return toRgb(dark, yellowSoft, p);
+  }
+
+  const red = [239, 68, 68];
+  const yellow = [250, 204, 21];
+  const green = [34, 197, 94];
+  if (p <= 0.5) {
+    return toRgb(red, yellow, p / 0.5);
+  }
+  return toRgb(yellow, green, (p - 0.5) / 0.5);
+}
+
+function DialGauge({ title, value, min, max, unit = "", colorScheme = "red-yellow-green" }) {
   const pct = Math.max(0, Math.min(1, (value - min) / Math.max(1, max - min)));
   const startDeg = 180;
   const endDeg = 360;
   const valueDeg = startDeg + (endDeg - startDeg) * pct;
   const display = `${Math.round(value)}${unit}`;
+  const dialColor = gaugeColorFromPct(pct, colorScheme);
 
   const ticks = new Array(11).fill(0).map((_, i) => {
     const deg = 180 + i * 18;
@@ -143,28 +181,19 @@ function DialGauge({ title, value, min, max, unit = "", color = "#22c55e" }) {
     const y2 = 70 + 47 * Math.sin(rad);
     return <line key={deg} x1={x1} y1={y1} x2={x2} y2={y2} className="dial-tick" />;
   });
-  const gid = `grad-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
-
   return (
     <div className="dial-card">
       <div className="dial-title">{title}</div>
       <svg viewBox="0 0 140 95" className="dial-svg">
-        <defs>
-          <linearGradient id={gid} x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#fb923c" />
-            <stop offset="55%" stopColor={color} />
-            <stop offset="100%" stopColor="#facc15" />
-          </linearGradient>
-        </defs>
         <path d={arcPath(70, 70, 48, 180, 360)} className="dial-track" />
         <path
           d={arcPath(70, 70, 48, 180, valueDeg)}
           className="dial-progress"
-          style={{ stroke: `url(#${gid})` }}
+          style={{ stroke: dialColor }}
         />
         {ticks}
       </svg>
-      <div className="dial-value" style={{ color }}>
+      <div className="dial-value" style={{ color: dialColor }}>
         {display}
       </div>
     </div>
@@ -216,6 +245,13 @@ export default function App() {
     anomalyPenalty: 2200,
     minRul: 0,
   });
+  const [initialValues, setInitialValues] = useState({
+    ambientTemp: 25,
+    humidity: 45,
+    driveCurrent: 320,
+    speed: 1,
+    adcBits: 12,
+  });
   const [inject, setInject] = useState({
     rgbEnabled: false,
     r: 600,
@@ -227,22 +263,24 @@ export default function App() {
     ripple: 25,
   });
 
+  const refreshState = async () => {
+    const res = await fetch(`${API_URL}/api/state`, { cache: "no-store" });
+    const data = await res.json();
+    setSim(data);
+    setControl({
+      speed: data.speed,
+      ambientTemp: data.ambientTemp,
+      humidity: data.humidity,
+      driveCurrent: data.driveCurrent,
+      adcBits: data.adc?.bits ?? 10,
+    });
+    setRulModel(data.rulModel ?? rulModel);
+    setInitialValues(data.initialValues ?? initialValues);
+  };
+
   useEffect(() => {
-    const loadState = async () => {
-      const res = await fetch(`${API_URL}/api/state`);
-      const data = await res.json();
-      setSim(data);
-      setControl({
-        speed: data.speed,
-        ambientTemp: data.ambientTemp,
-        humidity: data.humidity,
-        driveCurrent: data.driveCurrent,
-        adcBits: data.adc?.bits ?? 10,
-      });
-      setRulModel(data.rulModel ?? rulModel);
-    };
-    loadState();
-    const id = setInterval(loadState, 500);
+    refreshState();
+    const id = setInterval(refreshState, 500);
     const clockId = setInterval(() => setNow(new Date()), 1000);
     return () => {
       clearInterval(id);
@@ -254,7 +292,7 @@ export default function App() {
 
   const applyControl = (next) => {
     setControl(next);
-    postJson("/api/control", next);
+    postJson("/api/control", next).then(refreshState);
   };
 
   const applyAnomalies = (next) => {
@@ -263,7 +301,7 @@ export default function App() {
       rgb: { enabled: next.rgbEnabled, r: Number(next.r), g: Number(next.g), b: Number(next.b) },
       ldr: { enabled: next.ldrEnabled, value: Number(next.ldr) },
       ripple: { enabled: next.rippleEnabled, value: Number(next.ripple) },
-    });
+    }).then(refreshState);
   };
 
   const cTrace = sim.history.map((h) => h.rgb.C);
@@ -292,6 +330,24 @@ export default function App() {
       anomalyPenalty: Number(rulModel.anomalyPenalty),
       minRul: Number(rulModel.minRul),
     });
+    await refreshState();
+  };
+
+  const applyInitialProfile = async () => {
+    await postJson("/api/initial-values", {
+      ambientTemp: Number(initialValues.ambientTemp),
+      humidity: Number(initialValues.humidity),
+      driveCurrent: Number(initialValues.driveCurrent),
+      speed: Number(initialValues.speed),
+      adcBits: Number(initialValues.adcBits),
+      applyNow: true,
+    });
+    await refreshState();
+  };
+
+  const togglePlay = async () => {
+    await postJson("/api/control", { playing: !sim.playing });
+    await refreshState();
   };
 
   const applyScenario = (name) => {
@@ -341,7 +397,7 @@ export default function App() {
           </span>
           <span className="status-pill neutral">{Math.round(sim.timeHours)} h</span>
           <span className="status-pill neutral">{now.toLocaleTimeString()}</span>
-          <button className="run-btn" onClick={() => postJson("/api/control", { playing: !sim.playing })}>
+          <button className="run-btn" onClick={togglePlay}>
             {sim.playing ? "Pause" : "Run"}
           </button>
           <select
@@ -361,6 +417,7 @@ export default function App() {
         <aside className="sidebar">
           <section className="side-section">
             <h3>Parameters</h3>
+            <div className="formula-note">Starts in healthy mode by default. Use Initial Setup to customize startup values.</div>
             <label>
               Operating Hours
               <div className="inline-value">{Math.round(sim.timeHours)}</div>
@@ -411,6 +468,40 @@ export default function App() {
                 <option value={12}>12-bit (0-4095)</option>
               </select>
             </label>
+          </section>
+
+          <section className="side-section">
+            <h3>Initial Setup</h3>
+            <div className="formula-grid">
+              <div>
+                <div className="input-label">Ambient Temp (°C)</div>
+                <input type="number" value={initialValues.ambientTemp} onChange={(e) => setInitialValues({ ...initialValues, ambientTemp: Number(e.target.value) })} />
+              </div>
+              <div>
+                <div className="input-label">Humidity (%)</div>
+                <input type="number" value={initialValues.humidity} onChange={(e) => setInitialValues({ ...initialValues, humidity: Number(e.target.value) })} />
+              </div>
+              <div>
+                <div className="input-label">Drive Current (mA)</div>
+                <input type="number" value={initialValues.driveCurrent} onChange={(e) => setInitialValues({ ...initialValues, driveCurrent: Number(e.target.value) })} />
+              </div>
+              <div>
+                <div className="input-label">Startup Speed (x)</div>
+                <input type="number" step="0.25" value={initialValues.speed} onChange={(e) => setInitialValues({ ...initialValues, speed: Number(e.target.value) })} />
+              </div>
+            </div>
+            <div className="input-label">Startup ADC Mode</div>
+            <select
+              className="speed-select full-width"
+              value={initialValues.adcBits}
+              onChange={(e) => setInitialValues({ ...initialValues, adcBits: Number(e.target.value) })}
+            >
+              <option value={10}>10-bit (0-1023)</option>
+              <option value={12}>12-bit (0-4095)</option>
+            </select>
+            <button type="button" className="scenario-btn full-width" onClick={applyInitialProfile}>
+              Apply As Initial + Reset
+            </button>
           </section>
 
           <section className="side-section">
@@ -596,10 +687,10 @@ export default function App() {
           </section>
 
           <section className="gauge-row span-2">
-            <DialGauge title="Anomaly" value={anomalyVal * 100} min={0} max={100} color="#22c55e" />
-            <DialGauge title="RUL" value={sim.derived?.rulHours ?? 0} min={0} max={Math.max(1000, rulModel.baseLifeHours)} unit="h" color="#4ade80" />
-            <DialGauge title="LDR ADC" value={sim.sensors.ldr} min={0} max={ldrMax} color="#fbbf24" />
-            <DialGauge title="Junction" value={junctionTemp} min={0} max={150} unit="°C" color="#22c55e" />
+            <DialGauge title="Anomaly" value={anomalyVal * 100} min={0} max={100} colorScheme="green-yellow-red" />
+            <DialGauge title="RUL" value={sim.derived?.rulHours ?? 0} min={0} max={Math.max(1000, rulModel.baseLifeHours)} unit="h" colorScheme="red-yellow-green" />
+            <DialGauge title="LDR ADC" value={sim.sensors.ldr} min={0} max={4095} colorScheme="dark-yellow" />
+            <DialGauge title="Junction" value={junctionTemp} min={0} max={150} unit="°C" colorScheme="green-yellow-red" />
             <LedBulb r={displayR} g={displayG} b={displayB} intensity={rgbIntensity} />
           </section>
         </main>

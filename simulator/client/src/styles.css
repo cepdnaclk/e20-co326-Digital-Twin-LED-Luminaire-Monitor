@@ -365,6 +365,10 @@ input[type="number"] {
   gap: 6px;
 }
 
+.side-section .scenario-btn.full-width {
+  margin-top: 8px;
+}
+
 .readout-head {
   display: flex;
   justify-content: space-between;
@@ -463,7 +467,7 @@ input[type="number"] {
 
 .gauge-row {
   display: grid;
-  grid-template-columns: repeat(4, minmax(120px, 1fr));
+  grid-template-columns: repeat(5, minmax(120px, 1fr));
   gap: 10px;
 }
 
@@ -499,6 +503,7 @@ input[type="number"] {
   fill: none;
   stroke-width: 8;
   stroke-linecap: round;
+  filter: drop-shadow(0 0 4px rgba(250, 204, 21, 0.25));
 }
 
 .dial-tick {
@@ -511,6 +516,65 @@ input[type="number"] {
   text-align: center;
   font-family: "JetBrains Mono", monospace;
   font-weight: 700;
+}
+
+.led-card {
+  background: rgba(15, 15, 26, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  border-radius: 14px;
+  padding: 10px;
+}
+
+.led-stage {
+  position: relative;
+  height: 110px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+
+.led-glow {
+  position: absolute;
+  width: 120px;
+  height: 90px;
+  border-radius: 50%;
+  filter: blur(4px);
+}
+
+.led-bulb {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  z-index: 2;
+}
+
+.led-base-top {
+  position: absolute;
+  width: 18px;
+  height: 7px;
+  background: #59607f;
+  top: 70px;
+  border-radius: 2px;
+  z-index: 2;
+}
+
+.led-leg {
+  position: absolute;
+  width: 2px;
+  height: 12px;
+  background: #9ca3af;
+  top: 77px;
+  z-index: 1;
+}
+
+.led-leg.left {
+  left: calc(50% - 6px);
+}
+
+.led-leg.right {
+  left: calc(50% + 4px);
 }
 
 @media (max-width: 1220px) {

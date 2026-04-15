@@ -7,14 +7,21 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 4000;
 const TICK_SECONDS = 0.5;
+const HEALTHY_DEFAULTS = {
+  ambientTemp: 25,
+  humidity: 45,
+  driveCurrent: 320,
+  speed: 1,
+  adcBits: 12,
+};
 
 const state = {
-  playing: true,
-  speed: 1,
+  playing: false,
+  speed: HEALTHY_DEFAULTS.speed,
   timeHours: 0,
-  ambientTemp: 25,
-  humidity: 50,
-  driveCurrent: 350,
+  ambientTemp: HEALTHY_DEFAULTS.ambientTemp,
+  humidity: HEALTHY_DEFAULTS.humidity,
+  driveCurrent: HEALTHY_DEFAULTS.driveCurrent,
   anomalies: {
     rgb: { enabled: false, r: 0, g: 0, b: 0 },
     ldr: { enabled: false, value: 0 },
@@ -26,8 +33,15 @@ const state = {
     ripplePercent: 0,
   },
   adc: {
-    bits: 10,
-    max: 1023,
+    bits: HEALTHY_DEFAULTS.adcBits,
+    max: HEALTHY_DEFAULTS.adcBits === 12 ? 4095 : 1023,
+  },
+  initialValues: {
+    ambientTemp: HEALTHY_DEFAULTS.ambientTemp,
+    humidity: HEALTHY_DEFAULTS.humidity,
+    driveCurrent: HEALTHY_DEFAULTS.driveCurrent,
+    speed: HEALTHY_DEFAULTS.speed,
+    adcBits: HEALTHY_DEFAULTS.adcBits,
   },
   rulModel: {
     baseLifeHours: 12000,
@@ -49,10 +63,26 @@ const history = [];
 const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
 const noise = (v, ratio = 0.03) => v + (Math.random() - 0.5) * 2 * v * ratio;
 
-function simulate() {
-  if (state.playing) {
-    state.timeHours += TICK_SECONDS * state.speed * 30;
+function applyInitialValues(resetTime = true) {
+  state.ambientTemp = state.initialValues.ambientTemp;
+  state.humidity = state.initialValues.humidity;
+  state.driveCurrent = state.initialValues.driveCurrent;
+  state.speed = state.initialValues.speed;
+  state.adc.bits = state.initialValues.adcBits >= 12 ? 12 : 10;
+  state.adc.max = state.adc.bits === 12 ? 4095 : 1023;
+  if (resetTime) {
+    state.timeHours = 0;
+    history.length = 0;
   }
+  state.anomalies.rgb.enabled = false;
+  state.anomalies.ldr.enabled = false;
+  state.anomalies.ripple.enabled = false;
+}
+
+function simulate() {
+  if (!state.playing) return;
+
+  state.timeHours += TICK_SECONDS * state.speed * 30;
 
   const intensity =
     Math.exp(-0.00006 * state.timeHours) *
@@ -190,6 +220,22 @@ app.post("/api/rul-model", (req, res) => {
   if (typeof minRul === "number") model.minRul = clamp(minRul, 0, 50000);
 
   res.json({ ok: true, rulModel: model });
+});
+
+app.post("/api/initial-values", (req, res) => {
+  const { ambientTemp, humidity, driveCurrent, speed, adcBits, applyNow } = req.body;
+
+  if (typeof ambientTemp === "number") state.initialValues.ambientTemp = clamp(ambientTemp, -10, 100);
+  if (typeof humidity === "number") state.initialValues.humidity = clamp(humidity, 0, 100);
+  if (typeof driveCurrent === "number") state.initialValues.driveCurrent = clamp(driveCurrent, 50, 700);
+  if (typeof speed === "number") state.initialValues.speed = clamp(speed, 0.25, 8);
+  if (typeof adcBits === "number") state.initialValues.adcBits = adcBits >= 12 ? 12 : 10;
+
+  if (applyNow) {
+    applyInitialValues(true);
+  }
+
+  res.json({ ok: true, initialValues: state.initialValues, state });
 });
 
 app.listen(PORT, () => {
