@@ -81,10 +81,19 @@ body {
   gap: 8px;
 }
 
+.brand-rich {
+  gap: 10px;
+}
+
 .title {
   font-size: 1.02rem;
   font-weight: 700;
   margin: 0;
+}
+
+.title-sub {
+  font-size: 0.72rem;
+  color: #6b7280;
 }
 
 .dot {
@@ -114,6 +123,32 @@ body {
   gap: 8px;
 }
 
+.status-pill {
+  border-radius: 999px;
+  font-size: 0.68rem;
+  padding: 4px 8px;
+  border: 1px solid;
+  letter-spacing: 0.06em;
+}
+
+.status-pill.ok {
+  color: var(--ok);
+  border-color: rgba(34, 197, 94, 0.35);
+  background: rgba(34, 197, 94, 0.12);
+}
+
+.status-pill.warn {
+  color: var(--danger);
+  border-color: rgba(239, 68, 68, 0.35);
+  background: rgba(239, 68, 68, 0.12);
+}
+
+.status-pill.neutral {
+  color: #93a0bc;
+  border-color: #2c3356;
+  background: #12152b;
+}
+
 .run-btn {
   display: inline-flex;
   align-items: center;
@@ -133,6 +168,10 @@ body {
   color: #cbd5e1;
   height: 34px;
   padding: 0 10px;
+}
+
+.full-width {
+  width: 100%;
 }
 
 .workspace {
@@ -266,6 +305,12 @@ label {
   letter-spacing: 0.08em;
 }
 
+.input-label {
+  font-size: 0.72rem;
+  color: #8a93ab;
+  margin: 3px 0;
+}
+
 .triple-input {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -306,6 +351,18 @@ input[type="number"] {
 
 .scenario-btn.wide {
   grid-column: span 2;
+}
+
+.formula-note {
+  font-size: 0.7rem;
+  color: #7b849f;
+  margin-bottom: 8px;
+}
+
+.formula-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
 }
 
 .readout-head {

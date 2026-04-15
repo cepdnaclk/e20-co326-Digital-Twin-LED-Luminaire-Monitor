@@ -25,6 +25,23 @@ const state = {
     ldr: 0,
     ripplePercent: 0,
   },
+  adc: {
+    bits: 10,
+    max: 1023,
+  },
+  rulModel: {
+    baseLifeHours: 12000,
+    hoursPenalty: 0.55,
+    ripplePenalty: 85,
+    tempPenalty: 22,
+    currentPenalty: 12,
+    anomalyPenalty: 2200,
+    minRul: 0,
+  },
+  derived: {
+    anomalyScore: 0,
+    rulHours: 12000,
+  },
 };
 
 const history = [];
@@ -44,13 +61,14 @@ function simulate() {
     (1 + (state.driveCurrent - 350) * 0.0004);
 
   const safeIntensity = clamp(intensity, 0.05, 1.1);
+  const adcMax = state.adc.max;
   const baseR = clamp(noise(255 * safeIntensity * 1.0), 0, 1023);
   const baseG = clamp(noise(240 * safeIntensity * 0.95), 0, 1023);
   const baseB = clamp(noise(225 * safeIntensity * 0.9), 0, 1023);
   const baseLdr = clamp(
-    noise((4095 * Math.log10(1 + safeIntensity * 9)) / Math.log10(10), 0.02),
+    noise((adcMax * Math.log10(1 + safeIntensity * 9)) / Math.log10(10), 0.02),
     0,
-    4095
+    adcMax
   );
   const baseRipple = clamp(
     noise((1 + state.timeHours * 0.0001 + (state.driveCurrent - 350) * 0.0005) * 1.6, 0.1),
@@ -75,6 +93,26 @@ function simulate() {
   state.sensors.ldr = Math.round(finalLdr);
   state.sensors.ripplePercent = Number(finalRipple.toFixed(2));
 
+  const anomalyScore =
+    0.35 * Number(state.anomalies.rgb.enabled) +
+    0.3 * Number(state.anomalies.ldr.enabled) +
+    0.35 * Number(state.anomalies.ripple.enabled);
+
+  const rippleRatio = state.sensors.ripplePercent / 100;
+  const tempRise = Math.max(0, state.ambientTemp - 25);
+  const currentRiseRatio = Math.max(0, (state.driveCurrent - 350) / 350);
+  const model = state.rulModel;
+  const rul =
+    model.baseLifeHours -
+    state.timeHours * model.hoursPenalty -
+    rippleRatio * model.ripplePenalty * 100 -
+    tempRise * model.tempPenalty -
+    currentRiseRatio * model.currentPenalty * 100 -
+    anomalyScore * model.anomalyPenalty;
+
+  state.derived.anomalyScore = Number(anomalyScore.toFixed(2));
+  state.derived.rulHours = Math.max(model.minRul, Math.round(rul));
+
   history.push({
     t: Math.round(state.timeHours),
     rgb: { ...state.sensors.rgb },
@@ -91,13 +129,19 @@ app.get("/api/state", (_req, res) => {
 });
 
 app.post("/api/control", (req, res) => {
-  const { playing, speed, ambientTemp, humidity, driveCurrent } = req.body;
+  const { playing, speed, ambientTemp, humidity, driveCurrent, adcBits } = req.body;
 
   if (typeof playing === "boolean") state.playing = playing;
   if (typeof speed === "number") state.speed = clamp(speed, 0.25, 8);
   if (typeof ambientTemp === "number") state.ambientTemp = clamp(ambientTemp, -10, 100);
   if (typeof humidity === "number") state.humidity = clamp(humidity, 0, 100);
   if (typeof driveCurrent === "number") state.driveCurrent = clamp(driveCurrent, 50, 700);
+  if (typeof adcBits === "number") {
+    const bits = adcBits >= 12 ? 12 : 10;
+    state.adc.bits = bits;
+    state.adc.max = bits === 12 ? 4095 : 1023;
+    state.anomalies.ldr.value = clamp(state.anomalies.ldr.value, 0, state.adc.max);
+  }
 
   res.json({ ok: true, state });
 });
@@ -113,7 +157,7 @@ app.post("/api/anomalies", (req, res) => {
   }
   if (ldr) {
     state.anomalies.ldr.enabled = !!ldr.enabled;
-    if (typeof ldr.value === "number") state.anomalies.ldr.value = clamp(ldr.value, 0, 4095);
+    if (typeof ldr.value === "number") state.anomalies.ldr.value = clamp(ldr.value, 0, state.adc.max);
   }
   if (ripple) {
     state.anomalies.ripple.enabled = !!ripple.enabled;
@@ -123,6 +167,29 @@ app.post("/api/anomalies", (req, res) => {
   }
 
   res.json({ ok: true, anomalies: state.anomalies });
+});
+
+app.post("/api/rul-model", (req, res) => {
+  const {
+    baseLifeHours,
+    hoursPenalty,
+    ripplePenalty,
+    tempPenalty,
+    currentPenalty,
+    anomalyPenalty,
+    minRul,
+  } = req.body;
+
+  const model = state.rulModel;
+  if (typeof baseLifeHours === "number") model.baseLifeHours = clamp(baseLifeHours, 100, 50000);
+  if (typeof hoursPenalty === "number") model.hoursPenalty = clamp(hoursPenalty, 0, 10);
+  if (typeof ripplePenalty === "number") model.ripplePenalty = clamp(ripplePenalty, 0, 1000);
+  if (typeof tempPenalty === "number") model.tempPenalty = clamp(tempPenalty, 0, 200);
+  if (typeof currentPenalty === "number") model.currentPenalty = clamp(currentPenalty, 0, 200);
+  if (typeof anomalyPenalty === "number") model.anomalyPenalty = clamp(anomalyPenalty, 0, 20000);
+  if (typeof minRul === "number") model.minRul = clamp(minRul, 0, 50000);
+
+  res.json({ ok: true, rulModel: model });
 });
 
 app.listen(PORT, () => {

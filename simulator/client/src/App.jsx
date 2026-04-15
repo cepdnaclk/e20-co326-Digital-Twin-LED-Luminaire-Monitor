@@ -143,16 +143,24 @@ function DialGauge({ title, value, min, max, unit = "", color = "#22c55e" }) {
     const y2 = 70 + 47 * Math.sin(rad);
     return <line key={deg} x1={x1} y1={y1} x2={x2} y2={y2} className="dial-tick" />;
   });
+  const gid = `grad-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
 
   return (
     <div className="dial-card">
       <div className="dial-title">{title}</div>
       <svg viewBox="0 0 140 95" className="dial-svg">
+        <defs>
+          <linearGradient id={gid} x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="#fb923c" />
+            <stop offset="55%" stopColor={color} />
+            <stop offset="100%" stopColor="#facc15" />
+          </linearGradient>
+        </defs>
         <path d={arcPath(70, 70, 48, 180, 360)} className="dial-track" />
         <path
           d={arcPath(70, 70, 48, 180, valueDeg)}
           className="dial-progress"
-          style={{ stroke: color }}
+          style={{ stroke: `url(#${gid})` }}
         />
         {ticks}
       </svg>
@@ -163,13 +171,50 @@ function DialGauge({ title, value, min, max, unit = "", color = "#22c55e" }) {
   );
 }
 
+function LedBulb({ r, g, b, intensity }) {
+  const safeIntensity = Math.max(0.08, Math.min(1, intensity));
+  const glowOpacity = 0.35 + safeIntensity * 0.45;
+  const bulbColor = `rgba(${r}, ${g}, ${b}, ${0.55 + safeIntensity * 0.4})`;
+  const glowColor = `rgba(${r}, ${g}, ${b}, ${glowOpacity})`;
+
+  return (
+    <div className="led-card">
+      <div className="dial-title">LED Output</div>
+      <div className="led-stage">
+        <div className="led-glow" style={{ background: `radial-gradient(circle, ${glowColor} 0%, rgba(0,0,0,0) 70%)` }} />
+        <div
+          className="led-bulb"
+          style={{
+            background: `radial-gradient(circle at 35% 30%, rgba(255,255,255,0.95), ${bulbColor})`,
+            boxShadow: `0 0 ${18 + safeIntensity * 18}px ${glowColor}`,
+          }}
+        />
+        <div className="led-base-top" />
+        <div className="led-leg left" />
+        <div className="led-leg right" />
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [sim, setSim] = useState(null);
+  const [now, setNow] = useState(new Date());
   const [control, setControl] = useState({
     speed: 1,
     ambientTemp: 25,
     humidity: 50,
     driveCurrent: 350,
+    adcBits: 10,
+  });
+  const [rulModel, setRulModel] = useState({
+    baseLifeHours: 12000,
+    hoursPenalty: 0.55,
+    ripplePenalty: 85,
+    tempPenalty: 22,
+    currentPenalty: 12,
+    anomalyPenalty: 2200,
+    minRul: 0,
   });
   const [inject, setInject] = useState({
     rgbEnabled: false,
@@ -192,11 +237,17 @@ export default function App() {
         ambientTemp: data.ambientTemp,
         humidity: data.humidity,
         driveCurrent: data.driveCurrent,
+        adcBits: data.adc?.bits ?? 10,
       });
+      setRulModel(data.rulModel ?? rulModel);
     };
     loadState();
     const id = setInterval(loadState, 500);
-    return () => clearInterval(id);
+    const clockId = setInterval(() => setNow(new Date()), 1000);
+    return () => {
+      clearInterval(id);
+      clearInterval(clockId);
+    };
   }, []);
 
   if (!sim) return <div className="loading">Loading simulator...</div>;
@@ -221,6 +272,27 @@ export default function App() {
   const anomalyVal = Number(
     (Number(inject.rgbEnabled) * 0.35 + Number(inject.ldrEnabled) * 0.3 + Number(inject.rippleEnabled) * 0.35).toFixed(2)
   );
+  const ldrMax = sim.adc?.max ?? 1023;
+  const junctionTemp = sim.ambientTemp + (sim.driveCurrent / 1000) * 3 * 15;
+  const displayR = Math.min(255, Math.round((sim.sensors.rgb.R / 1023) * 255));
+  const displayG = Math.min(255, Math.round((sim.sensors.rgb.G / 1023) * 255));
+  const displayB = Math.min(255, Math.round((sim.sensors.rgb.B / 1023) * 255));
+  const rgbIntensity = Math.min(
+    1,
+    Math.max(0.1, (sim.sensors.rgb.R + sim.sensors.rgb.G + sim.sensors.rgb.B) / (1023 * 3))
+  );
+
+  const saveRulModel = async () => {
+    await postJson("/api/rul-model", {
+      baseLifeHours: Number(rulModel.baseLifeHours),
+      hoursPenalty: Number(rulModel.hoursPenalty),
+      ripplePenalty: Number(rulModel.ripplePenalty),
+      tempPenalty: Number(rulModel.tempPenalty),
+      currentPenalty: Number(rulModel.currentPenalty),
+      anomalyPenalty: Number(rulModel.anomalyPenalty),
+      minRul: Number(rulModel.minRul),
+    });
+  };
 
   const applyScenario = (name) => {
     const map = {
@@ -256,12 +328,19 @@ export default function App() {
   return (
     <div className="page bg-bg text-gray">
       <header className="topbar card-header">
-        <div className="brand">
+        <div className="brand brand-rich">
           <span className="dot glow-pulse" />
-          <h1 className="title">LED Digital Twin</h1>
-          <span className="version">v2.0</span>
+          <div>
+            <h1 className="title">LED Digital Twin Simulator</h1>
+            <div className="title-sub">Sensor stream emulation · ESP32 + TCS34725 + LDR</div>
+          </div>
         </div>
         <div className="top-actions">
+          <span className={`status-pill ${sim.playing ? "ok" : "warn"}`}>
+            {sim.playing ? "RUNNING" : "PAUSED"}
+          </span>
+          <span className="status-pill neutral">{Math.round(sim.timeHours)} h</span>
+          <span className="status-pill neutral">{now.toLocaleTimeString()}</span>
           <button className="run-btn" onClick={() => postJson("/api/control", { playing: !sim.playing })}>
             {sim.playing ? "Pause" : "Run"}
           </button>
@@ -321,65 +400,123 @@ export default function App() {
                 onChange={(e) => applyControl({ ...control, humidity: Number(e.target.value) })}
               />
             </label>
+            <label>
+              ADC Resolution ({control.adcBits}-bit)
+              <select
+                className="speed-select full-width"
+                value={control.adcBits}
+                onChange={(e) => applyControl({ ...control, adcBits: Number(e.target.value) })}
+              >
+                <option value={10}>10-bit (0-1023)</option>
+                <option value={12}>12-bit (0-4095)</option>
+              </select>
+            </label>
           </section>
 
           <section className="side-section">
             <h3>Fault Injection</h3>
-            <label className="toggle-row">
+            <div className="toggle-row">
               <span>
                 Ripple Increase
                 <small>Capacitor ESR degradation</small>
               </span>
               <label className="toggle-box">
-              <input
-                type="checkbox"
-                checked={inject.rippleEnabled}
-                onChange={(e) => applyAnomalies({ ...inject, rippleEnabled: e.target.checked })}
-              />
+                <input
+                  type="checkbox"
+                  checked={inject.rippleEnabled}
+                  onChange={(e) => applyAnomalies({ ...inject, rippleEnabled: e.target.checked })}
+                />
                 <span className="toggle-track"></span>
                 <span className="toggle-knob"></span>
               </label>
-            </label>
-            <label className="toggle-row">
+            </div>
+            <div className="toggle-row">
               <span>
                 Color Shift
                 <small>Phosphor degradation</small>
               </span>
               <label className="toggle-box">
-              <input
-                type="checkbox"
-                checked={inject.rgbEnabled}
-                onChange={(e) => applyAnomalies({ ...inject, rgbEnabled: e.target.checked })}
-              />
+                <input
+                  type="checkbox"
+                  checked={inject.rgbEnabled}
+                  onChange={(e) => applyAnomalies({ ...inject, rgbEnabled: e.target.checked })}
+                />
                 <span className="toggle-track"></span>
                 <span className="toggle-knob"></span>
               </label>
-            </label>
-            <label className="toggle-row">
+            </div>
+            <div className="toggle-row">
               <span>
                 Sudden Failure
                 <small>Bond wire / die attach</small>
               </span>
               <label className="toggle-box">
-              <input
-                type="checkbox"
-                checked={inject.ldrEnabled}
-                onChange={(e) => applyAnomalies({ ...inject, ldrEnabled: e.target.checked })}
-              />
+                <input
+                  type="checkbox"
+                  checked={inject.ldrEnabled}
+                  onChange={(e) => applyAnomalies({ ...inject, ldrEnabled: e.target.checked })}
+                />
                 <span className="toggle-track"></span>
                 <span className="toggle-knob"></span>
               </label>
-            </label>
+            </div>
             <div className="inject-custom">
               <div className="mini-label">Custom Inject Values</div>
               <div className="triple-input">
-                <input type="number" value={inject.r} min="0" max="1023" onChange={(e) => applyAnomalies({ ...inject, r: e.target.value })} />
-                <input type="number" value={inject.g} min="0" max="1023" onChange={(e) => applyAnomalies({ ...inject, g: e.target.value })} />
-                <input type="number" value={inject.b} min="0" max="1023" onChange={(e) => applyAnomalies({ ...inject, b: e.target.value })} />
+                <div>
+                  <div className="input-label">R</div>
+                  <input type="number" value={inject.r} min="0" max="1023" onChange={(e) => applyAnomalies({ ...inject, r: e.target.value })} />
+                </div>
+                <div>
+                  <div className="input-label">G</div>
+                  <input type="number" value={inject.g} min="0" max="1023" onChange={(e) => applyAnomalies({ ...inject, g: e.target.value })} />
+                </div>
+                <div>
+                  <div className="input-label">B</div>
+                  <input type="number" value={inject.b} min="0" max="1023" onChange={(e) => applyAnomalies({ ...inject, b: e.target.value })} />
+                </div>
               </div>
-              <input type="number" value={inject.ldr} min="0" max="4095" onChange={(e) => applyAnomalies({ ...inject, ldr: e.target.value })} />
+              <div className="input-label">LDR ADC ({ldrMax === 1023 ? "10-bit" : "12-bit"})</div>
+              <input type="number" value={inject.ldr} min="0" max={ldrMax} onChange={(e) => applyAnomalies({ ...inject, ldr: e.target.value })} />
+              <div className="input-label">Ripple (%)</div>
               <input type="number" value={inject.ripple} min="0" max="100" onChange={(e) => applyAnomalies({ ...inject, ripple: e.target.value })} />
             </div>
+          </section>
+
+          <section className="side-section">
+            <h3>RUL Formula Editor</h3>
+            <div className="formula-note">
+              RUL = base - (hours*hoursPenalty) - ripple - thermal - current - anomaly
+            </div>
+            <div className="formula-grid">
+              <div>
+                <div className="input-label">Base Life (h)</div>
+                <input type="number" value={rulModel.baseLifeHours} onChange={(e) => setRulModel({ ...rulModel, baseLifeHours: Number(e.target.value) })} />
+              </div>
+              <div>
+                <div className="input-label">Hours Penalty</div>
+                <input type="number" step="0.01" value={rulModel.hoursPenalty} onChange={(e) => setRulModel({ ...rulModel, hoursPenalty: Number(e.target.value) })} />
+              </div>
+              <div>
+                <div className="input-label">Ripple Penalty</div>
+                <input type="number" value={rulModel.ripplePenalty} onChange={(e) => setRulModel({ ...rulModel, ripplePenalty: Number(e.target.value) })} />
+              </div>
+              <div>
+                <div className="input-label">Temp Penalty</div>
+                <input type="number" value={rulModel.tempPenalty} onChange={(e) => setRulModel({ ...rulModel, tempPenalty: Number(e.target.value) })} />
+              </div>
+              <div>
+                <div className="input-label">Current Penalty</div>
+                <input type="number" value={rulModel.currentPenalty} onChange={(e) => setRulModel({ ...rulModel, currentPenalty: Number(e.target.value) })} />
+              </div>
+              <div>
+                <div className="input-label">Anomaly Penalty</div>
+                <input type="number" value={rulModel.anomalyPenalty} onChange={(e) => setRulModel({ ...rulModel, anomalyPenalty: Number(e.target.value) })} />
+              </div>
+            </div>
+            <button type="button" className="scenario-btn full-width" onClick={saveRulModel}>
+              Apply RUL Formula
+            </button>
           </section>
 
           <section className="side-section">
@@ -460,9 +597,10 @@ export default function App() {
 
           <section className="gauge-row span-2">
             <DialGauge title="Anomaly" value={anomalyVal * 100} min={0} max={100} color="#22c55e" />
-            <DialGauge title="RUL" value={Math.max(0, 10000 - sim.timeHours * 0.5)} min={0} max={10000} unit="h" color="#4ade80" />
-            <DialGauge title="LDR ADC" value={sim.sensors.ldr} min={0} max={4095} color="#fbbf24" />
-            <DialGauge title="Junction" value={sim.ambientTemp + (sim.driveCurrent / 1000) * 3 * 15} min={0} max={150} unit="°C" color="#22c55e" />
+            <DialGauge title="RUL" value={sim.derived?.rulHours ?? 0} min={0} max={Math.max(1000, rulModel.baseLifeHours)} unit="h" color="#4ade80" />
+            <DialGauge title="LDR ADC" value={sim.sensors.ldr} min={0} max={ldrMax} color="#fbbf24" />
+            <DialGauge title="Junction" value={junctionTemp} min={0} max={150} unit="°C" color="#22c55e" />
+            <LedBulb r={displayR} g={displayG} b={displayB} intensity={rgbIntensity} />
           </section>
         </main>
       </div>
