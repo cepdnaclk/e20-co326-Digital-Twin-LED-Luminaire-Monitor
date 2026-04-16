@@ -39,21 +39,6 @@
         "sessionExpiry": ""
     },
     {
-        "id": "6b9e0ea860ee3c58",
-        "type": "influxdb",
-        "hostname": "http://influxdb",
-        "port": 8086,
-        "protocol": "http",
-        "database": "",
-        "name": "",
-        "usetls": false,
-        "tls": "",
-        "influxdbVersion": "2.0",
-        "url": "http://influxdb:8086",
-        "timeout": 10,
-        "rejectUnauthorized": true
-    },
-    {
         "id": "0e0d7c63c7290efa",
         "type": "mqtt-broker",
         "name": "",
@@ -85,6 +70,21 @@
         "sessionExpiry": ""
     },
     {
+        "id": "6b9e0ea860ee3c58",
+        "type": "influxdb",
+        "hostname": "http://influxdb",
+        "port": 8086,
+        "protocol": "http",
+        "database": "",
+        "name": "",
+        "usetls": false,
+        "tls": "",
+        "influxdbVersion": "2.0",
+        "url": "http://influxdb:8086",
+        "timeout": 10,
+        "rejectUnauthorized": true
+    },
+    {
         "id": "4f0b07841abc109f",
         "type": "mqtt in",
         "z": "fde217c77fb16fbe",
@@ -110,7 +110,7 @@
         "type": "function",
         "z": "fde217c77fb16fbe",
         "name": "Ldr",
-        "func": "msg.payload = [\n    {\n        measurement: \"light_intensity\",\n        fields: {\n            ldr: Number(msg.payload.ldr)\n        },\n        timestamp: new Date(msg.payload.timestamp)\n    }\n];\n\nreturn msg;",
+        "func": "msg.payload = {\n    ldr: Number(msg.payload)\n};\nreturn msg;",
         "outputs": 1,
         "timeout": 0,
         "noerr": 0,
@@ -121,10 +121,85 @@
         "y": 180,
         "wires": [
             [
-                "5e0a272e3d1b7e6e",
-                "37ce0f544afd4181"
+                "37ce0f544afd4181",
+                "5e0a272e3d1b7e6e"
             ]
         ]
+    },
+    {
+        "id": "37ce0f544afd4181",
+        "type": "debug",
+        "z": "fde217c77fb16fbe",
+        "name": "debug 1",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "false",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 600,
+        "y": 280,
+        "wires": []
+    },
+    {
+        "id": "22a7eedff22d9ab7",
+        "type": "mqtt in",
+        "z": "fde217c77fb16fbe",
+        "name": "Simulator In",
+        "topic": "led/simulator/sensors",
+        "qos": "0",
+        "datatype": "auto-detect",
+        "broker": "0e0d7c63c7290efa",
+        "nl": false,
+        "rap": true,
+        "rh": 0,
+        "inputs": 0,
+        "x": 290,
+        "y": 320,
+        "wires": [
+            [
+                "f1a9f6b34fbe4e2d"
+            ]
+        ]
+    },
+    {
+        "id": "f1a9f6b34fbe4e2d",
+        "type": "function",
+        "z": "fde217c77fb16fbe",
+        "name": "Parse Simulator Payload",
+        "func": "let data = msg.payload;\nif (typeof data === \"string\") {\n    try {\n        data = JSON.parse(data);\n    } catch (e) {\n        node.warn(\"Simulator payload is not valid JSON\");\n        return null;\n    }\n}\n\nif (!data || typeof data !== \"object\") {\n    return null;\n}\n\nmsg.payload = {\n    ldr: Number(data?.sensors?.ldrAdc ?? data?.sensors?.ldr ?? 0),\n    ripple_percent: Number(data?.sensors?.ripplePercent ?? 0),\n    rgb_r: Number(data?.sensors?.tcs34725?.R ?? 0),\n    rgb_g: Number(data?.sensors?.tcs34725?.G ?? 0),\n    rgb_b: Number(data?.sensors?.tcs34725?.B ?? 0),\n    source: \"simulated\"\n};\n\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 520,
+        "y": 320,
+        "wires": [
+            [
+                "5e0a272e3d1b7e6e",
+                "a6d26a57e9fa7e13"
+            ]
+        ]
+    },
+    {
+        "id": "a6d26a57e9fa7e13",
+        "type": "debug",
+        "z": "fde217c77fb16fbe",
+        "name": "simulated debug",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 760,
+        "y": 360,
+        "wires": []
     },
     {
         "id": "5e0a272e3d1b7e6e",
@@ -142,22 +217,6 @@
         "bucket": "light_data",
         "x": 630,
         "y": 180,
-        "wires": []
-    },
-    {
-        "id": "37ce0f544afd4181",
-        "type": "debug",
-        "z": "fde217c77fb16fbe",
-        "name": "debug 1",
-        "active": true,
-        "tosidebar": true,
-        "console": false,
-        "tostatus": false,
-        "complete": "false",
-        "statusVal": "",
-        "statusType": "auto",
-        "x": 600,
-        "y": 280,
         "wires": []
     }
 ]
