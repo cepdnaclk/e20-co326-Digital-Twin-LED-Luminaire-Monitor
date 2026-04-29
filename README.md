@@ -10,6 +10,9 @@ This project uses Docker Compose to run the monitoring stack:
 
 - Docker Desktop installed and running
 - Docker Compose plugin available (`docker compose`)
+- On Linux, you may need either:
+  - run Docker commands with `sudo`, or
+  - add your user to the `docker` group so `docker compose` can access `/var/run/docker.sock`
 
 ## How to Run the Containers
 
@@ -57,7 +60,7 @@ This project uses Docker Compose to run the monitoring stack:
    docker compose -f docker-compose.yml -f docker-compose.dev.yml ps
    ```
 
-5. The simulator UI dev server runs on `http://localhost:5174`.
+5. The simulator UI dev server runs on `http://localhost:5174/`.
 
 6. Edit simulator UI or server files in `simulator/client` or `simulator/server`; the dev services mount the source code and will reflect changes without rebuilding the container.
 
