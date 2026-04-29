@@ -1,0 +1,30 @@
+services:
+  simulator-server:
+    command: sh -c "npm install --prefix server --no-audit --no-fund && npm run dev --prefix server"
+    volumes:
+      - ../simulator:/app:delegated
+    environment:
+      - NODE_ENV=development
+      - MQTT_URL=mqtt://mosquitto:1883
+      - MQTT_ENABLED=true
+    ports:
+      - "4000:4000"
+    depends_on:
+      - mosquitto
+    networks:
+      - iot_network
+
+  simulator-client:
+    image: node:20
+    working_dir: /app
+    command: sh -c "npm install --prefix client --no-audit --no-fund && npm run dev --prefix client -- --host 0.0.0.0"
+    volumes:
+      - ../simulator:/app:delegated
+    environment:
+      - NODE_ENV=development
+    ports:
+      - "5174:5173"
+    depends_on:
+      - simulator-server
+    networks:
+      - iot_network
