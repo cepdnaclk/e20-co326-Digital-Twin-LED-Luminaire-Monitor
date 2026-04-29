@@ -38,7 +38,9 @@ services:
       - iot_network
 
   node-red:
-    image: nodered/node-red:latest
+    build:
+      context: ./node-red
+    image: nodered-custom
     container_name: node-red
     volumes:
       - ./node-red/data:/data
