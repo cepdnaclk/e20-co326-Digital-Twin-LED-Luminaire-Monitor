@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const API_URL = "http://localhost:4000";
 
@@ -10,6 +10,13 @@ const postJson = async (path, payload) => {
   });
   return res.json();
 };
+
+const normalizePathInput = (value) =>
+  String(value ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "");
 
 function LineChart({ values, color, yLabel, xLabel, yUnit = "", precision = 0 }) {
   const W = 560;
@@ -202,13 +209,19 @@ function DialGauge({ title, value, min, max, unit = "", colorScheme = "red-yello
 
 function LedBulb({ r, g, b, intensity, theme }) {
   const safeIntensity = Math.max(0.08, Math.min(1, intensity));
-  const glowOpacity = theme === "light" ? 0.55 + safeIntensity * 0.6 : 0.35 + safeIntensity * 0.45;
-  const bulbColor = `rgba(${r}, ${g}, ${b}, ${0.55 + safeIntensity * 0.4})`;
-  const glowColor = `rgba(${r}, ${g}, ${b}, ${glowOpacity})`;
+  const glowOpacity = theme === "light" ? 0.55 + safeIntensity * 0.35 : 0.45 + safeIntensity * 0.45;
+  const visibleR = Math.max(r, 28);
+  const visibleG = Math.max(g, 28);
+  const visibleB = Math.max(b, 28);
+  const bulbColor = `rgba(${visibleR}, ${visibleG}, ${visibleB}, ${0.58 + safeIntensity * 0.34})`;
+  const glowColor =
+    theme === "light"
+      ? `rgba(250, 204, 21, ${glowOpacity})`
+      : `rgba(${visibleR}, ${visibleG}, ${visibleB}, ${glowOpacity})`;
   const stageBg =
     theme === "light"
-      ? "radial-gradient(circle, rgba(15,23,42,0.09) 0%, rgba(15,23,42,0.03) 45%, rgba(15,23,42,0) 75%)"
-      : "transparent";
+      ? "radial-gradient(circle, rgba(250,204,21,0.12) 0%, rgba(250,204,21,0.05) 45%, rgba(250,204,21,0) 75%)"
+      : "radial-gradient(circle, rgba(15,23,42,0.35) 0%, rgba(15,23,42,0.14) 52%, rgba(15,23,42,0) 78%)";
 
   return (
     <div className="led-card">
@@ -230,8 +243,33 @@ function LedBulb({ r, g, b, intensity, theme }) {
   );
 }
 
+const parseIndexFromLabel = (value) => {
+  const match = String(value ?? "").match(/(\d+)$/);
+  if (!match) return null;
+  return Math.max(1, Number(match[1]));
+};
+
+const sortByIndexedLabel = (a, b) => {
+  const idxA = parseIndexFromLabel(a);
+  const idxB = parseIndexFromLabel(b);
+  if (idxA !== null && idxB !== null && idxA !== idxB) return idxA - idxB;
+  if (idxA !== null && idxB === null) return -1;
+  if (idxA === null && idxB !== null) return 1;
+  return String(a).localeCompare(String(b));
+};
+
 export default function App() {
   const [sim, setSim] = useState(null);
+  const [instances, setInstances] = useState([]);
+  const [selectedInstanceId, setSelectedInstanceId] = useState("lum_0001");
+  const [defaultInstanceId, setDefaultInstanceId] = useState("lum_0001");
+  const [fleetForm, setFleetForm] = useState({
+    count: 3,
+    site: "siteA",
+    floor: "floor1",
+    line: "line1",
+    cell: "cell1",
+  });
   const [now, setNow] = useState(new Date());
   const [theme, setTheme] = useState(() => localStorage.getItem("sim-theme") || "dark");
   const [control, setControl] = useState({
@@ -267,9 +305,28 @@ export default function App() {
     rippleEnabled: false,
     ripple: 25,
   });
+  const [sidebarWidth, setSidebarWidth] = useState(() => Number(localStorage.getItem("sim-sidebar-width")) || 320);
+  const [isResizingSidebar, setIsResizingSidebar] = useState(false);
+  const resizeStartX = useRef(0);
+  const resizeStartWidth = useRef(sidebarWidth);
 
-  const refreshState = async () => {
-    const res = await fetch(`${API_URL}/api/state`, { cache: "no-store" });
+  const endpointFor = (suffix) => `/api/instances/${selectedInstanceId}${suffix}`;
+
+  const refreshInstances = async () => {
+    const res = await fetch(`${API_URL}/api/instances`, { cache: "no-store" });
+    const data = await res.json();
+    const list = data.instances ?? [];
+    setInstances(list);
+    setDefaultInstanceId(data.defaultInstanceId || "lum_0001");
+    if (!list.find((item) => item.id === selectedInstanceId) && list.length) {
+      setSelectedInstanceId(list[0].id);
+    }
+    return list;
+  };
+
+  const refreshState = async (instanceId = selectedInstanceId) => {
+    const res = await fetch(`${API_URL}/api/instances/${instanceId}/state`, { cache: "no-store" });
+    if (!res.ok) return;
     const data = await res.json();
     setSim(data);
     setControl({
@@ -284,14 +341,18 @@ export default function App() {
   };
 
   useEffect(() => {
-    refreshState();
-    const id = setInterval(refreshState, 500);
+    const tick = async () => {
+      await refreshInstances();
+      await refreshState(selectedInstanceId);
+    };
+    tick();
+    const id = setInterval(tick, 500);
     const clockId = setInterval(() => setNow(new Date()), 1000);
     return () => {
       clearInterval(id);
       clearInterval(clockId);
     };
-  }, []);
+  }, [selectedInstanceId]);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -303,20 +364,40 @@ export default function App() {
     localStorage.setItem("sim-theme", theme);
   }, [theme]);
 
+  useEffect(() => {
+    localStorage.setItem("sim-sidebar-width", String(sidebarWidth));
+  }, [sidebarWidth]);
+
+  useEffect(() => {
+    if (!isResizingSidebar) return undefined;
+    const onMove = (event) => {
+      const delta = event.clientX - resizeStartX.current;
+      const maxWidth = Math.min(window.innerWidth * 0.55, 560);
+      setSidebarWidth(Math.min(maxWidth, Math.max(260, resizeStartWidth.current + delta)));
+    };
+    const onUp = () => setIsResizingSidebar(false);
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, [isResizingSidebar]);
+
   if (!sim) return <div className="loading">Loading simulator...</div>;
 
   const applyControl = (next) => {
     setControl(next);
-    postJson("/api/control", next).then(refreshState);
+    postJson(endpointFor("/control"), next).then(() => refreshState(selectedInstanceId));
   };
 
   const applyAnomalies = (next) => {
     setInject(next);
-    postJson("/api/anomalies", {
+    postJson(endpointFor("/anomalies"), {
       rgb: { enabled: next.rgbEnabled, r: Number(next.r), g: Number(next.g), b: Number(next.b) },
       ldr: { enabled: next.ldrEnabled, value: Number(next.ldr) },
       ripple: { enabled: next.rippleEnabled, value: Number(next.ripple) },
-    }).then(refreshState);
+    }).then(() => refreshState(selectedInstanceId));
   };
 
   const cTrace = sim.history.map((h) => h.rgb.C);
@@ -334,9 +415,47 @@ export default function App() {
     1,
     Math.max(0.1, (sim.sensors.rgb.R + sim.sensors.rgb.G + sim.sensors.rgb.B) / (1023 * 3))
   );
+  const siteGroups = instances.reduce((acc, lamp) => {
+    const site = lamp?.location?.site || "unknown-site";
+    if (!acc[site]) acc[site] = [];
+    acc[site].push(lamp);
+    return acc;
+  }, {});
+  const siteMaps = Object.entries(siteGroups).map(([site, siteLamps]) => {
+    const floorGroups = siteLamps.reduce((acc, lamp) => {
+      const floor = lamp?.location?.floor || "unknown-floor";
+      if (!acc[floor]) acc[floor] = [];
+      acc[floor].push(lamp);
+      return acc;
+    }, {});
+
+    const floorMaps = Object.entries(floorGroups).map(([floor, lamps]) => {
+      const lineKeys = [...new Set(lamps.map((lamp) => lamp.location?.line || "line1"))].sort(sortByIndexedLabel);
+      const cellKeys = [...new Set(lamps.map((lamp) => lamp.location?.cell || "cell1"))].sort(sortByIndexedLabel);
+      const matrix = {};
+
+      for (const lamp of lamps) {
+        const lineKey = lamp.location?.line || "line1";
+        const cellKey = lamp.location?.cell || "cell1";
+        const key = `${lineKey}__${cellKey}`;
+        if (!matrix[key]) matrix[key] = [];
+        matrix[key].push(lamp);
+      }
+
+      for (const key of Object.keys(matrix)) {
+        matrix[key].sort((a, b) => a.id.localeCompare(b.id));
+      }
+
+      return { floor, lineKeys, cellKeys, matrix };
+    });
+
+    floorMaps.sort((a, b) => sortByIndexedLabel(a.floor, b.floor));
+    return { site, floorMaps };
+  });
+  siteMaps.sort((a, b) => sortByIndexedLabel(a.site, b.site));
 
   const saveRulModel = async () => {
-    await postJson("/api/rul-model", {
+    await postJson(endpointFor("/rul-model"), {
       baseLifeHours: Number(rulModel.baseLifeHours),
       hoursPenalty: Number(rulModel.hoursPenalty),
       ripplePenalty: Number(rulModel.ripplePenalty),
@@ -345,11 +464,11 @@ export default function App() {
       anomalyPenalty: Number(rulModel.anomalyPenalty),
       minRul: Number(rulModel.minRul),
     });
-    await refreshState();
+    await refreshState(selectedInstanceId);
   };
 
   const applyInitialProfile = async () => {
-    await postJson("/api/initial-values", {
+    await postJson(endpointFor("/initial-values"), {
       ambientTemp: Number(initialValues.ambientTemp),
       humidity: Number(initialValues.humidity),
       driveCurrent: Number(initialValues.driveCurrent),
@@ -357,12 +476,79 @@ export default function App() {
       adcBits: Number(initialValues.adcBits),
       applyNow: true,
     });
-    await refreshState();
+    await refreshState(selectedInstanceId);
   };
 
   const togglePlay = async () => {
-    await postJson("/api/control", { playing: !sim.playing });
-    await refreshState();
+    await postJson(endpointFor("/control"), { playing: !sim.playing });
+    await refreshState(selectedInstanceId);
+  };
+
+  const createFleet = async () => {
+    const safeCount = Math.min(100, Math.max(1, Number(fleetForm.count) || 1));
+    const safeSite = normalizePathInput(fleetForm.site) || "sitea";
+    const safeFloor = normalizePathInput(fleetForm.floor) || "floor1";
+    const safeLine = normalizePathInput(fleetForm.line) || "line1";
+    const safeCell = normalizePathInput(fleetForm.cell) || "cell1";
+    setFleetForm((prev) => ({
+      ...prev,
+      count: safeCount,
+      site: safeSite,
+      floor: safeFloor,
+      line: safeLine,
+      cell: safeCell,
+    }));
+    await postJson("/api/instances", {
+      count: safeCount,
+      defaults: {
+        location: {
+          site: safeSite,
+          floor: safeFloor,
+          line: safeLine,
+          cell: safeCell,
+        },
+      },
+    });
+    const list = await refreshInstances();
+    if (list.length) {
+      const latestId = list[list.length - 1].id;
+      setSelectedInstanceId(latestId);
+      await refreshState(latestId);
+    }
+  };
+
+  const runAll = async (playing) => {
+    await postJson("/api/instances/bulk/control", { control: { playing } });
+    await refreshInstances();
+    await refreshState(selectedInstanceId);
+  };
+
+  const deleteInstance = async (id) => {
+    await fetch(`${API_URL}/api/instances/${id}`, { method: "DELETE" });
+    const list = await refreshInstances();
+    const fallbackId = list.find((item) => item.id === selectedInstanceId)?.id || list[0]?.id;
+    if (fallbackId) {
+      setSelectedInstanceId(fallbackId);
+      await refreshState(fallbackId);
+    }
+  };
+
+  const deleteAllInstances = async () => {
+    await postJson("/api/instances/delete-all", {});
+    const list = await refreshInstances();
+    const fallbackId = list[0]?.id;
+    if (fallbackId) {
+      setSelectedInstanceId(fallbackId);
+      await refreshState(fallbackId);
+    }
+  };
+
+  const toggleInstancePlay = async (instance) => {
+    await postJson(`/api/instances/${instance.id}/control`, { playing: !instance.playing });
+    await refreshInstances();
+    if (instance.id === selectedInstanceId) {
+      await refreshState(selectedInstanceId);
+    }
   };
 
   const applyScenario = (name) => {
@@ -398,20 +584,27 @@ export default function App() {
 
   return (
     <div className="page bg-bg text-gray">
-      <header className="topbar card-header">
-        <div className="brand brand-rich">
-          <span className="dot glow-pulse" />
-          <div>
-            <h1 className="title">LED Digital Twin Simulator</h1>
-            <div className="title-sub">Sensor stream emulation · ESP32 + TCS34725 + LDR</div>
+      <header className="topbar card-header topbar-modern">
+        <div className="brand brand-rich brand-logo-wrap">
+          <div className="brand-wordmark">
+            <div className="wordmark-title">
+              <span className="lum">Lum</span>
+              <span className="edge">Edge</span>
+            </div>
+            <div className="wordmark-sub">Predictive Maintenance for LED Systems</div>
           </div>
         </div>
         <div className="top-actions">
-          <span className={`status-pill ${sim.playing ? "ok" : "warn"}`}>
-            {sim.playing ? "RUNNING" : "PAUSED"}
-          </span>
-          <span className="status-pill neutral">{Math.round(sim.timeHours)} h</span>
-          <span className="status-pill neutral">{now.toLocaleTimeString()}</span>
+          <div className="status-cluster">
+            <span className="status-pill neutral">{instances.length} instances</span>
+            <span className="status-pill neutral">{selectedInstanceId}</span>
+            <span className={`status-pill ${sim.playing ? "ok" : "warn"}`}>
+              {sim.playing ? "RUNNING" : "PAUSED"}
+            </span>
+            <span className="status-pill neutral">{Math.round(sim.timeHours)} h</span>
+            <span className="status-pill neutral">{now.toLocaleTimeString()}</span>
+          </div>
+          <div className="top-control-group">
           <button className="run-btn" onClick={togglePlay}>
             {sim.playing ? "Pause" : "Run"}
           </button>
@@ -425,6 +618,18 @@ export default function App() {
             <option value={3}>3x</option>
             <option value={6}>6x</option>
           </select>
+          <select
+            className="speed-select"
+            value={selectedInstanceId}
+            onChange={(e) => setSelectedInstanceId(e.target.value)}
+          >
+            {instances.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.id}
+              </option>
+            ))}
+          </select>
+          </div>
         </div>
         <button
           type="button"
@@ -437,7 +642,7 @@ export default function App() {
         </button>
       </header>
 
-      <div className="workspace">
+      <div className="workspace" style={{ gridTemplateColumns: `${sidebarWidth}px 8px 1fr` }}>
         <aside className="sidebar">
           <section className="side-section">
             <h3>Parameters</h3>
@@ -492,6 +697,69 @@ export default function App() {
                 <option value={12}>12-bit (0-4095)</option>
               </select>
             </label>
+          </section>
+
+          <section className="side-section">
+            <h3>Fleet Manager</h3>
+            <div className="formula-note">Create lamps with location path. Same floor value groups lamps into one floor box.</div>
+            <div className="formula-grid">
+              <div>
+                <div className="input-label">Count</div>
+                <input
+                  type="number"
+                  min="1"
+                  max="100"
+                  value={fleetForm.count}
+                  onChange={(e) => {
+                    const value = Number(e.target.value);
+                    setFleetForm({ ...fleetForm, count: Number.isNaN(value) ? 1 : Math.min(100, Math.max(1, value)) });
+                  }}
+                />
+              </div>
+              <div>
+                <div className="input-label">Site</div>
+                <input
+                  type="text"
+                  pattern="[a-z0-9_-]+"
+                  value={fleetForm.site}
+                  onChange={(e) => setFleetForm({ ...fleetForm, site: normalizePathInput(e.target.value) })}
+                />
+              </div>
+              <div>
+                <div className="input-label">Floor</div>
+                <input
+                  type="text"
+                  pattern="[a-z0-9_-]+"
+                  value={fleetForm.floor}
+                  onChange={(e) => setFleetForm({ ...fleetForm, floor: normalizePathInput(e.target.value) })}
+                />
+              </div>
+              <div>
+                <div className="input-label">Line</div>
+                <input
+                  type="text"
+                  pattern="[a-z0-9_-]+"
+                  value={fleetForm.line}
+                  onChange={(e) => setFleetForm({ ...fleetForm, line: normalizePathInput(e.target.value) })}
+                />
+              </div>
+              <div>
+                <div className="input-label">Cell</div>
+                <input
+                  type="text"
+                  pattern="[a-z0-9_-]+"
+                  value={fleetForm.cell}
+                  onChange={(e) => setFleetForm({ ...fleetForm, cell: normalizePathInput(e.target.value) })}
+                />
+              </div>
+            </div>
+            <div className="formula-note">Allowed text: lowercase letters, numbers, `_` and `-`.</div>
+            <div className="scenario-grid">
+              <button type="button" className="scenario-btn" onClick={createFleet}>Create Lamps</button>
+              <button type="button" className="scenario-btn" onClick={() => runAll(true)}>Run All</button>
+              <button type="button" className="scenario-btn" onClick={() => runAll(false)}>Pause All</button>
+              <button type="button" className="scenario-btn danger wide" onClick={deleteAllInstances}>Delete All (Except Default)</button>
+            </div>
           </section>
 
           <section className="side-section">
@@ -659,6 +927,17 @@ export default function App() {
             <div className="readout"><span>Ripple</span><strong>{sim.sensors.ripplePercent}%</strong></div>
           </section>
         </aside>
+        <div
+          className={`sidebar-resizer ${isResizingSidebar ? "active" : ""}`}
+          onMouseDown={(event) => {
+            resizeStartX.current = event.clientX;
+            resizeStartWidth.current = sidebarWidth;
+            setIsResizingSidebar(true);
+          }}
+          title="Drag to resize parameters panel"
+          role="separator"
+          aria-orientation="vertical"
+        />
 
         <main className="main-grid">
           <section className="tile card">
@@ -716,6 +995,130 @@ export default function App() {
             <DialGauge title="LDR ADC" value={sim.sensors.ldr} min={0} max={4095} colorScheme="dark-yellow" />
             <DialGauge title="Junction" value={junctionTemp} min={0} max={150} unit="°C" colorScheme="green-yellow-red" />
             <LedBulb r={displayR} g={displayG} b={displayB} intensity={rgbIntensity} theme={theme} />
+          </section>
+
+          <section className="tile span-2 card">
+            <div className="tile-head">
+              <h3>Instances Overview</h3>
+            </div>
+            <div className="instances-table-wrap">
+              <table className="instances-table">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Status</th>
+                    <th>Location</th>
+                    <th>Topic</th>
+                    <th>RUL</th>
+                    <th>Anomaly</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {instances.map((instance) => (
+                    <tr key={instance.id} className={instance.id === selectedInstanceId ? "selected" : ""}>
+                      <td>{instance.id}</td>
+                      <td>
+                        <span className={`status-pill ${instance.playing ? "ok" : "warn"}`}>
+                          {instance.playing ? "RUNNING" : "PAUSED"}
+                        </span>
+                      </td>
+                      <td>{`${instance.location?.site}/${instance.location?.floor}/${instance.location?.line}/${instance.location?.cell}`}</td>
+                      <td className="topic-cell" title={instance.mqttTopic}>{instance.mqttTopic}</td>
+                      <td>{Math.round(instance.rulHours ?? 0)}h</td>
+                      <td>{(Number(instance.anomalyScore ?? 0) * 100).toFixed(0)}%</td>
+                      <td className="row-actions">
+                        <button type="button" className="scenario-btn compact" onClick={() => setSelectedInstanceId(instance.id)}>
+                          Focus
+                        </button>
+                        <button type="button" className="scenario-btn compact" onClick={() => toggleInstancePlay(instance)}>
+                          {instance.playing ? "Pause" : "Run"}
+                        </button>
+                        {instance.id !== defaultInstanceId && (
+                          <button type="button" className="scenario-btn compact danger" onClick={() => deleteInstance(instance.id)}>
+                            Delete
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section className="tile span-2 card">
+            <div className="tile-head">
+              <h3>Factory Lamp Map</h3>
+            </div>
+            <div className="factory-map">
+              {siteMaps.map(({ site, floorMaps }) => (
+                <div className="factory-site" key={site}>
+                  <div className="factory-site-title">{site}</div>
+                  {floorMaps.map(({ floor, lineKeys, cellKeys, matrix }) => (
+                    <div className="factory-floor" key={`${site}-${floor}`}>
+                      <div className="factory-floor-title">
+                        {floor} ({lineKeys.length} lines x {cellKeys.length} cells)
+                      </div>
+                      <div className="factory-matrix">
+                        <div className="matrix-row" style={{ gridTemplateColumns: `90px repeat(${cellKeys.length}, minmax(160px, 1fr))` }}>
+                          <div className="matrix-corner">Line/Cell</div>
+                          {cellKeys.map((cell) => (
+                            <div key={cell} className="matrix-cell-header">{cell}</div>
+                          ))}
+                        </div>
+                        {lineKeys.map((line) => (
+                          <div className="matrix-row" key={line} style={{ gridTemplateColumns: `90px repeat(${cellKeys.length}, minmax(160px, 1fr))` }}>
+                            <div className="matrix-line-label">{line}</div>
+                            {cellKeys.map((cell) => {
+                              const lamps = matrix[`${line}__${cell}`] || [];
+                              return (
+                                <div className="matrix-cell" key={`${line}-${cell}`}>
+                                  <div className="lamp-stack">
+                                    {lamps.map((lamp) => (
+                                      <div key={lamp.id} className={`lamp-chip ${lamp.id === selectedInstanceId ? "active" : ""}`}>
+                                        {lamp.id !== defaultInstanceId && (
+                                          <button
+                                            type="button"
+                                            className="lamp-delete-btn"
+                                            onClick={() => deleteInstance(lamp.id)}
+                                            title={`Delete ${lamp.id}`}
+                                            aria-label={`Delete ${lamp.id}`}
+                                          >
+                                            Del
+                                          </button>
+                                        )}
+                                        <button
+                                          type="button"
+                                          className="lamp-chip-body"
+                                          onClick={() => setSelectedInstanceId(lamp.id)}
+                                          title={`${lamp.id} | RUL ${Math.round(lamp.rulHours ?? 0)}h | ${(Number(lamp.anomalyScore ?? 0) * 100).toFixed(0)}%`}
+                                        >
+                                          <div className="lamp-chip-top">
+                                            <span className={`lamp-dot ${lamp.playing ? "ok" : "warn"}`} />
+                                            <span className="lamp-chip-id">{lamp.id}</span>
+                                          </div>
+                                          <div className="lamp-chip-meta">
+                                            RUL {Math.round(lamp.rulHours ?? 0)}h
+                                          </div>
+                                          <div className="lamp-chip-meta">
+                                            ANM {(Number(lamp.anomalyScore ?? 0) * 100).toFixed(0)}%
+                                          </div>
+                                        </button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
           </section>
         </main>
       </div>
