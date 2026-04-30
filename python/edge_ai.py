@@ -49,7 +49,7 @@ import paho.mqtt.client as paho_mqtt
 from app.config import (
     INFLUXDB_URL, INFLUXDB_TOKEN, INFLUXDB_ORG, INFLUXDB_BUCKET,
     MQTT_URL, MQTT_CLIENT_ID,
-    MQTT_TOPIC_DATA, MQTT_TOPIC_EDGE, MQTT_TOPIC_ALERTS,
+    MQTT_TOPIC_DATA, MQTT_TOPIC_EDGE, MQTT_TOPIC_ALERTS, MQTT_TOPIC_PREDICTIONS,
     API_HOST, API_PORT,
     FAULT_CLASSIFIER_PATH, FAILURE_PREDICTOR_PATH,
     PREDICTION_INTERVAL_SECONDS,
@@ -76,6 +76,9 @@ logger = logging.getLogger("edge_ai")
 # In-memory buffer of readings per bulb (most recent 336 = 14 days @ 1/hour)
 readings_buffer: dict[str, list[dict]] = defaultdict(list)
 MAX_BUFFER_SIZE = 336
+
+# Latest metadata per bulb (location info from topic/payload)
+bulb_metadata: dict[str, dict] = {}
 
 # ML model instances (loaded on startup)
 failure_predictor: FailurePredictor | None = None
@@ -201,6 +204,7 @@ def _on_mqtt_message(client, userdata, msg):
             # Raw sensor data from simulator or ESP32
             reading = _extract_reading_from_payload(payload)
             if reading:
+                bulb_metadata[bulb_id] = _extract_bulb_metadata(topic, payload)
                 readings_buffer[bulb_id].append(reading)
                 # Trim buffer to MAX_BUFFER_SIZE
                 if len(readings_buffer[bulb_id]) > MAX_BUFFER_SIZE:
@@ -251,10 +255,98 @@ def _extract_reading_from_payload(payload: dict) -> dict | None:
         return None
 
 
+def _extract_bulb_metadata(topic: str, payload: dict) -> dict:
+    """
+    Extract bulb metadata (location + ID) from topic or payload.
+    """
+    parts = topic.split("/") if isinstance(topic, str) else []
+    topic_site = parts[1] if len(parts) > 1 else "sitea"
+    topic_floor = parts[2] if len(parts) > 2 else "floor1"
+    topic_line = parts[3] if len(parts) > 3 else "line1"
+    topic_cell = parts[4] if len(parts) > 4 else "cell1"
+    topic_lamp_id = parts[5] if len(parts) > 5 else "unknown_lamp"
+
+    lamp = payload.get("lamp", {}) if isinstance(payload, dict) else {}
+    location = lamp.get("location", {}) if isinstance(lamp, dict) else {}
+
+    return {
+        "site": str(location.get("site", topic_site)),
+        "floor": str(location.get("floor", topic_floor)),
+        "line": str(location.get("line", topic_line)),
+        "cell": str(location.get("cell", topic_cell)),
+        "luminaireId": str(lamp.get("id", topic_lamp_id)),
+    }
+
+
 def _mqtt_publish(topic: str, payload: str):
     """Publish a message to MQTT."""
     if mqtt_client and mqtt_connected:
         mqtt_client.publish(topic, payload, qos=0, retain=False)
+
+
+def _format_prediction_topic(bulb_id: str, meta: dict) -> str:
+    """Build prediction topic from a template and metadata."""
+    values = {
+        "site": meta.get("site", "sitea"),
+        "floor": meta.get("floor", "floor1"),
+        "line": meta.get("line", "line1"),
+        "cell": meta.get("cell", "cell1"),
+        "bulb_id": bulb_id,
+    }
+    try:
+        return MQTT_TOPIC_PREDICTIONS.format(**values)
+    except Exception:
+        return (
+            f"factory/{values['site']}/{values['floor']}/"
+            f"{values['line']}/{values['cell']}/{bulb_id}/telemetry/predictions"
+        )
+
+
+def _summarize_alerts(alerts: list[dict]) -> dict:
+    """Return the highest-severity alert summary for a prediction."""
+    if not alerts:
+        return {
+            "severity": "NONE",
+            "alert_type": "NONE",
+            "message": "No alerts",
+        }
+
+    severity_rank = {
+        "CRITICAL": 4,
+        "HIGH": 3,
+        "MEDIUM": 2,
+        "INFO": 1,
+    }
+    top = max(alerts, key=lambda a: severity_rank.get(a.get("severity", ""), 0))
+    return {
+        "severity": str(top.get("severity", "UNKNOWN")),
+        "alert_type": str(top.get("alert_type", "UNKNOWN")),
+        "message": str(top.get("message", "")),
+    }
+
+
+def _publish_prediction(bulb_id: str, result: dict):
+    """Publish a summarized prediction payload for Grafana/InfluxDB."""
+    meta = {
+        "site": "sitea",
+        "floor": "floor1",
+        "line": "line1",
+        "cell": "cell1",
+        "luminaireId": bulb_id,
+    }
+    meta.update(bulb_metadata.get(bulb_id, {}))
+
+    payload = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "bulb_id": bulb_id,
+        "meta": meta,
+        "current_status": result.get("current_status", {}),
+        "failure_prediction": result.get("failure_prediction", {}),
+        "fault_classification": result.get("fault_classification", {}),
+        "alert": _summarize_alerts(result.get("alerts", [])),
+    }
+    topic = _format_prediction_topic(bulb_id, meta)
+    _mqtt_publish(topic, json.dumps(payload))
 
 
 def start_mqtt():
@@ -364,6 +456,7 @@ def run_scheduled_predictions():
             try:
                 result = run_prediction(bulb_id, readings)
                 alerts = result.get("alerts", [])
+                _publish_prediction(bulb_id, result)
                 if alerts:
                     logger.info(
                         "Bulb %s: %d alert(s) generated", bulb_id, len(alerts),

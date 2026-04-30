@@ -37,6 +37,10 @@ MQTT_TOPIC_ALERTS = os.getenv(
     "MQTT_TOPIC_ALERTS",
     "factory/sitea/floor1/line1/cell1/lum_0001/alerts/status",
 )
+MQTT_TOPIC_PREDICTIONS = os.getenv(
+    "MQTT_TOPIC_PREDICTIONS",
+    "factory/{site}/{floor}/{line}/{cell}/{bulb_id}/telemetry/predictions",
+)
 
 # ---------------------------------------------------------------------------
 # FastAPI server

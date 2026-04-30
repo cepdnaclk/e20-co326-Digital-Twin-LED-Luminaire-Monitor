@@ -1,5 +1,4 @@
 services:
-
   mosquitto:
     image: eclipse-mosquitto:2
     container_name: mosquitto
@@ -99,6 +98,7 @@ services:
       - INFLUXDB_BUCKET=light_data
       - MQTT_URL=mqtt://mosquitto:1883
       - MQTT_TOPIC_ALERTS=factory/sitea/floor1/line1/cell1/lum_0001/alerts/status
+      - MQTT_TOPIC_PREDICTIONS=factory/{site}/{floor}/{line}/{cell}/{bulb_id}/telemetry/predictions
       - MQTT_TOPIC_DATA=factory/+/+/+/+/+/telemetry/raw
       - MQTT_TOPIC_EDGE=factory/+/+/+/+/+/telemetry/edge-ai
     ports:

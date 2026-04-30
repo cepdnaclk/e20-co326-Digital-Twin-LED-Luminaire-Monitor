@@ -261,6 +261,14 @@ export default function App() {
     }
   };
 
+  const resetInstance = async (id) => {
+    await postJson(`/api/instances/${id}/initial-values`, { applyNow: true });
+    await refreshInstances();
+    if (id === selectedInstanceId) {
+      await refreshState(selectedInstanceId);
+    }
+  };
+
   const deleteAllInstances = async () => {
     await postJson("/api/instances/delete-all", {});
     const list = await refreshInstances();
@@ -764,6 +772,9 @@ export default function App() {
                         </button>
                         <button type="button" className="scenario-btn compact" onClick={() => toggleInstancePlay(instance)}>
                           {instance.playing ? "Pause" : "Run"}
+                        </button>
+                        <button type="button" className="scenario-btn compact" onClick={() => resetInstance(instance.id)}>
+                          Reset
                         </button>
                         {instance.id !== defaultInstanceId && (
                           <button type="button" className="scenario-btn compact danger" onClick={() => deleteInstance(instance.id)}>
