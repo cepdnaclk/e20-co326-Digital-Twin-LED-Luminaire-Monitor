@@ -21,9 +21,10 @@
         "debug": {
             "filter": "filterSelected",
             "filteredNodes": [
-                "37ce0f544afd4181",
                 "8349cce1af2e3775",
-                "a6d26a57e9fa7e13"
+                "a6d26a57e9fa7e13",
+                "66753575907d7f22",
+                "24686ccec3f07271"
             ]
         }
     }

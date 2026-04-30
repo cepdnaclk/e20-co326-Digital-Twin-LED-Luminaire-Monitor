@@ -341,7 +341,8 @@
         "y": 700,
         "wires": [
             [
-                "gc3d4e5f6a7b8c9d"
+                "gc3d4e5f6a7b8c9d",
+                "24686ccec3f07271"
             ]
         ]
     },
@@ -357,6 +358,22 @@
         "bucket": "light_data",
         "x": 720,
         "y": 700,
+        "wires": []
+    },
+    {
+        "id": "24686ccec3f07271",
+        "type": "debug",
+        "z": "fde217c77fb16fbe",
+        "name": "debug 4",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "false",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 700,
+        "y": 800,
         "wires": []
     }
 ]

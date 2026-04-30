@@ -249,8 +249,8 @@
         "rap": true,
         "rh": 0,
         "inputs": 0,
-        "x": 250,
-        "y": 520,
+        "x": 230,
+        "y": 480,
         "wires": [
             [
                 "2b7c9d1e3f4a5b6c"
@@ -269,8 +269,8 @@
         "initialize": "",
         "finalize": "",
         "libs": [],
-        "x": 480,
-        "y": 520,
+        "x": 460,
+        "y": 480,
         "wires": [
             [
                 "7a8b9c0d1e2f3a4b",
@@ -292,8 +292,8 @@
         "retentionPolicyV18Flux": "",
         "org": "light_org",
         "bucket": "light_data",
-        "x": 720,
-        "y": 520,
+        "x": 700,
+        "y": 480,
         "wires": []
     },
     {
@@ -308,8 +308,8 @@
         "complete": "false",
         "statusVal": "",
         "statusType": "auto",
-        "x": 900,
-        "y": 620,
+        "x": 880,
+        "y": 580,
         "wires": []
     },
     {
@@ -322,8 +322,8 @@
         "datatype": "auto-detect",
         "broker": "0e0d7c63c7290efa",
         "inputs": 0,
-        "x": 260,
-        "y": 700,
+        "x": 220,
+        "y": 600,
         "wires": [
             [
                 "fb2c3d4e5f6a7b8c"
@@ -337,8 +337,8 @@
         "name": "Parse Edge-AI JSON",
         "func": "let data=msg.payload;\nif(typeof data==='string'){try{data=JSON.parse(data);}catch(e){return null;}}\nmsg.payload=[{status:String(data.status||'UNKNOWN'),confidence:Number(data.confidence||0),score_healthy:Number((data.scores&&data.scores[0])||0),score_degrading:Number((data.scores&&data.scores[1])||0),score_failed:Number((data.scores&&data.scores[2])||0),sudden_failure:data.sudden_failure?1:0,ldr:Number(data.ldr||0)},{source:'esp32_tinyml'}];\nreturn msg;",
         "outputs": 1,
-        "x": 480,
-        "y": 700,
+        "x": 440,
+        "y": 600,
         "wires": [
             [
                 "gc3d4e5f6a7b8c9d",
@@ -356,8 +356,8 @@
         "precisionV18FluxV20": "ms",
         "org": "light_org",
         "bucket": "light_data",
-        "x": 720,
-        "y": 700,
+        "x": 680,
+        "y": 600,
         "wires": []
     },
     {
@@ -372,8 +372,8 @@
         "complete": "false",
         "statusVal": "",
         "statusType": "auto",
-        "x": 700,
-        "y": 800,
+        "x": 660,
+        "y": 700,
         "wires": []
     }
 ]
