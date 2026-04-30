@@ -3,6 +3,7 @@
 .glow-cyan{box-shadow:0 0 15px rgba(0,229,255,0.2)}
 .ortho-line{background:linear-gradient(90deg,rgba(0,229,255,0) 0%,rgba(0,229,255,0.2) 50%,rgba(0,229,255,0) 100%);height:1px}
 .wave-mask{mask-image:linear-gradient(to right,transparent,black 15%,black 85%,transparent)}
+.hero-bottom-fade{background:linear-gradient(to bottom,transparent 70%,#0d1516 100%)}
 
 /* Scroll reveal */
 .reveal{opacity:0;transform:translateY(32px);transition:opacity 0.7s ease,transform 0.7s ease}
@@ -45,6 +46,68 @@ input[type=range]::-moz-range-progress{height:2px;background:#00e5ff;border-radi
 .wordmark-title .lum{color:#4a90e2}
 .wordmark-title .edge{color:#feeb75}
 .wordmark-sub{font-size:.64rem;text-transform:uppercase;letter-spacing:.12em;color:#6b7280}
+.theme-toggle-btn{position:relative;z-index:60}
+
+/* Light mode support */
+html:not(.dark) body{background:#edf3f5;color:#0f1f22}
+html:not(.dark) header{background:rgba(237,243,245,0.92)!important;border-bottom-color:rgba(0,98,110,0.22)!important}
+html:not(.dark) .wordmark-sub{color:#4b5563}
+html:not(.dark) #mainNav .nav-link{color:#475569}
+html:not(.dark) #mainNav .nav-link:hover{color:#006875}
+html:not(.dark) .glass-panel{background:rgba(255,255,255,0.82);border-color:rgba(0,98,110,0.22)}
+html:not(.dark) aside{background:rgba(255,255,255,0.78)!important;border-color:rgba(0,98,110,0.16)!important}
+html:not(.dark) .ortho-line{background:linear-gradient(90deg,rgba(0,98,110,0) 0%,rgba(0,98,110,0.22) 50%,rgba(0,98,110,0) 100%)}
+html:not(.dark) .theme-toggle-btn{border-color:rgba(0,98,110,0.35);color:#006875}
+html:not(.dark) .theme-toggle-btn:hover{background:rgba(0,98,110,0.08)}
+html:not(.dark) .bg-zinc-950\/50,
+html:not(.dark) .bg-zinc-950\/30,
+html:not(.dark) .bg-zinc-950\/20{background-color:rgba(255,255,255,0.72)!important}
+html:not(.dark) .border-white\/5,
+html:not(.dark) .border-white\/10{border-color:rgba(15,31,34,0.12)!important}
+html:not(.dark) .text-zinc-500{color:#64748b!important}
+html:not(.dark) .text-zinc-400{color:#475569!important}
+html:not(.dark) .text-on-surface,
+html:not(.dark) .text-on-background{color:#0f1f22!important}
+html:not(.dark) .text-on-surface-variant{color:#334155!important}
+html:not(.dark) .text-primary{color:#0b3f46!important}
+html:not(.dark) .text-primary-container{color:#006875!important}
+html:not(.dark) .text-secondary{color:#0f8a3a!important}
+html:not(.dark) .text-error{color:#b42318!important}
+html:not(.dark) .hero-bottom-fade{background:linear-gradient(to bottom,transparent 72%,rgba(237,243,245,0.92) 100%)}
+html:not(.dark) #parameters .text-secondary-container{color:#0f8a3a!important}
+html:not(.dark) #parameters .grid.grid-cols-1.md\:grid-cols-2.gap-gutter > div{
+  background:#ffffff!important;
+  border-color:rgba(15,31,34,0.16)!important;
+}
+html:not(.dark) #parameters .grid.grid-cols-1.md\:grid-cols-2.gap-gutter > div:nth-child(1){
+  background:rgba(0,104,117,0.08)!important;
+  border-color:rgba(0,104,117,0.24)!important;
+}
+html:not(.dark) #parameters .grid.grid-cols-1.md\:grid-cols-2.gap-gutter > div:nth-child(2){
+  background:rgba(15,138,58,0.08)!important;
+  border-color:rgba(15,138,58,0.24)!important;
+}
+html:not(.dark) #parameters .grid.grid-cols-1.md\:grid-cols-2.gap-gutter > div:nth-child(3){
+  background:rgba(177,129,15,0.10)!important;
+  border-color:rgba(177,129,15,0.26)!important;
+}
+html:not(.dark) #parameters .grid.grid-cols-1.md\:grid-cols-2.gap-gutter > div:nth-child(4){
+  background:rgba(0,104,117,0.08)!important;
+  border-color:rgba(0,104,117,0.24)!important;
+}
+html:not(.dark) #parameters .grid.grid-cols-1.md\:grid-cols-2.gap-gutter > div .text-primary-fixed-dim{
+  color:#005d68!important;
+}
+html:not(.dark) #parameters .grid.grid-cols-1.md\:grid-cols-2.gap-gutter > div .text-tertiary{
+  color:#8a6a00!important;
+}
+html:not(.dark) #architecture .reveal.reveal-delay-1 .flex.flex-wrap.gap-sm > div{
+  background:#f8fbfc!important;
+  border-color:rgba(15,31,34,0.16)!important;
+}
+html:not(.dark) #architecture .reveal.reveal-delay-1 .flex.flex-wrap.gap-sm > div .text-on-surface{
+  color:#0f1f22!important;
+}
 
 @media(prefers-reduced-motion:reduce){
   .reveal{transition:none;opacity:1;transform:none}

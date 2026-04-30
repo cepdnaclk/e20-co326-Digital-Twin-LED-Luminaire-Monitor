@@ -34,12 +34,9 @@ fontSize:{"headline-xl":["48px",{"lineHeight":"1.1","letterSpacing":"-0.02em","f
     <a class="nav-link font-label-sm text-xs font-bold tracking-wider uppercase text-zinc-400 hover:text-[#00E5FF] pb-1" href="#architecture" data-section="architecture">Architecture</a>
     <a class="nav-link font-label-sm text-xs font-bold tracking-wider uppercase text-zinc-400 hover:text-[#00E5FF] pb-1" href="#simulation" data-section="simulation">Simulation</a>
   </nav>
-  <div class="flex items-center gap-6">
-    <div class="flex gap-4 text-zinc-400">
-      <span class="material-symbols-outlined hover:text-[#00E5FF] cursor-pointer transition-colors p-2 rounded-full hover:bg-[#00E5FF]/10">settings</span>
-      <span class="material-symbols-outlined hover:text-[#00E5FF] cursor-pointer transition-colors p-2 rounded-full hover:bg-[#00E5FF]/10">account_circle</span>
-    </div>
-  </div>
+  <button id="themeToggle" type="button" class="theme-toggle-btn inline-flex items-center justify-center w-10 h-10 rounded-full border border-[#00E5FF]/30 text-[#00E5FF] hover:bg-[#00E5FF]/10 transition-all" aria-label="Toggle color theme">
+    <span id="themeToggleIcon" class="material-symbols-outlined text-[20px]">light_mode</span>
+  </button>
 </header>
 
 <!-- ===== SIDE NAV (single instance) ===== -->
@@ -65,7 +62,8 @@ fontSize:{"headline-xl":["48px",{"lineHeight":"1.1","letterSpacing":"-0.02em","f
 <section id="hero" class="relative min-h-screen flex flex-col">
   <div class="absolute inset-0 z-0 pointer-events-none">
     <div class="absolute inset-0 bg-[radial-gradient(circle_at_70%_40%,rgba(0,229,255,0.1),transparent_50%)]"></div>
-    <div class="absolute inset-0 bg-[linear-gradient(to_bottom,transparent_70%,#0d1516_100%)]"></div>
+    <div class="absolute inset-0 hero-bottom-fade"></div>
+    <canvas id="waveCanvas" class="absolute inset-0 w-full h-full opacity-70"></canvas>
   </div>
 
   <div class="flex-grow grid grid-cols-12 gap-gutter px-margin relative z-10 py-xl items-center">
@@ -111,7 +109,7 @@ fontSize:{"headline-xl":["48px",{"lineHeight":"1.1","letterSpacing":"-0.02em","f
               <span class="font-label-sm text-[10px] text-secondary uppercase block mb-1">Status</span>
               <span class="font-headline-lg text-[24px] text-on-surface">NOMINAL</span>
             </div>
-            <div class="absolute bottom-1/4 -left-8 glass-panel p-md rounded-xl">
+            <div class="absolute bottom-1/4 -left-12 glass-panel p-md rounded-xl">
               <span class="font-label-sm text-[10px] text-primary-container uppercase block mb-1">Temp</span>
               <span class="font-headline-lg text-[24px] text-on-surface">42.4°C</span>
             </div>
@@ -121,17 +119,6 @@ fontSize:{"headline-xl":["48px",{"lineHeight":"1.1","letterSpacing":"-0.02em","f
     </div>
   </div>
 
-  <!-- Wave Telemetry Strip -->
-  <div class="mt-auto relative h-40 w-full wave-mask border-t border-white/5 bg-zinc-950/20 backdrop-blur-sm">
-    <div class="absolute top-4 left-margin flex items-center gap-sm z-10">
-      <span class="material-symbols-outlined text-primary-container text-sm">monitoring</span>
-      <span class="font-label-sm text-[10px] text-on-surface-variant uppercase tracking-widest">Real-Time Telemetry Feed: Node_01_Lumen_Sync</span>
-    </div>
-    <canvas id="waveCanvas" class="absolute inset-0 w-full h-32 opacity-50"></canvas>
-    <div class="absolute bottom-0 w-full h-px ortho-line opacity-50"></div>
-    <div class="absolute bottom-8 w-full h-px ortho-line opacity-20"></div>
-    <div class="absolute bottom-16 w-full h-px ortho-line opacity-10"></div>
-  </div>
 </section>
 
 <!-- ===== PARAMETERS SECTION ===== -->

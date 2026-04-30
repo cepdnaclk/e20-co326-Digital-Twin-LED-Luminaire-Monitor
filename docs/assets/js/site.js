@@ -7,6 +7,30 @@ function showToast(msg) {
   setTimeout(() => { t.classList.add('opacity-0', 'translate-y-4'); t.classList.remove('opacity-100', 'translate-y-0'); }, 2500);
 }
 
+/* ===== THEME TOGGLE ===== */
+function initThemeToggle() {
+  const root = document.documentElement;
+  const btn = document.getElementById('themeToggle');
+  const icon = document.getElementById('themeToggleIcon');
+  if (!btn || !icon) return;
+
+  const stored = localStorage.getItem('theme');
+  const preferDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const shouldUseDark = stored ? stored === 'dark' : preferDark;
+
+  const applyTheme = (isDark) => {
+    root.classList.toggle('dark', isDark);
+    localStorage.setItem('theme', isDark ? 'dark' : 'light');
+    icon.textContent = isDark ? 'light_mode' : 'dark_mode';
+    btn.setAttribute('aria-label', isDark ? 'Switch to light mode' : 'Switch to dark mode');
+  };
+
+  applyTheme(shouldUseDark);
+  btn.addEventListener('click', () => {
+    applyTheme(!root.classList.contains('dark'));
+  });
+}
+
 /* ===== SPARKLINES ===== */
 function renderSparklines() {
   ['spark1', 'spark2'].forEach(id => {
@@ -40,41 +64,27 @@ function initWave() {
   function draw() {
     const w = canvas.offsetWidth, h = canvas.offsetHeight;
     ctx.clearRect(0, 0, w, h);
+    const centerY = h * 0.56;
+    const layers = [
+      { amp: 36, freq: 0.009, speed: 0.035, alpha: 0.38, color: '0,229,255', width: 2.4 },
+      { amp: 28, freq: 0.011, speed: 0.028, alpha: 0.30, color: '64,229,108', width: 2.0 },
+      { amp: 20, freq: 0.014, speed: 0.022, alpha: 0.26, color: '255,180,171', width: 1.7 }
+    ];
 
-    for (let layer = 0; layer < 3; layer++) {
-      const amp = 12 + layer * 8;
-      const freq = 0.003 + layer * 0.001;
-      const speed = 0.015 + layer * 0.008;
-      const alpha = 0.15 - layer * 0.04;
-
+    layers.forEach((layer, idx) => {
       ctx.beginPath();
-      ctx.moveTo(0, h);
       for (let x = 0; x <= w; x += 2) {
-        const y = h - amp - Math.sin(x * freq + t * speed) * amp * 0.6 - Math.sin(x * freq * 1.8 + t * speed * 0.7) * amp * 0.3;
-        ctx.lineTo(x, y);
+        const y = centerY + idx * 30 + Math.sin(x * layer.freq + t * layer.speed) * layer.amp;
+        if (x === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
       }
-      ctx.lineTo(w, h);
-      ctx.closePath();
-
-      const grad = ctx.createLinearGradient(0, h - amp * 2.5, 0, h);
-      grad.addColorStop(0, `rgba(0,229,255,${alpha})`);
-      grad.addColorStop(1, 'rgba(0,229,255,0)');
-      ctx.fillStyle = grad;
-      ctx.fill();
-    }
-
-    const spikePositions = [0.2, 0.45, 0.75];
-    const spikeColors = ['rgba(0,229,255,0.4)', 'rgba(64,229,108,0.4)', 'rgba(255,180,171,0.4)'];
-    spikePositions.forEach((pos, i) => {
-      const sx = w * pos;
-      const sh = (30 + Math.sin(t * 0.02 + i) * 15);
-      ctx.beginPath();
-      ctx.moveTo(sx, h);
-      ctx.lineTo(sx, h - sh);
-      ctx.strokeStyle = spikeColors[i];
-      ctx.lineWidth = 1;
+      ctx.strokeStyle = `rgba(${layer.color},${layer.alpha})`;
+      ctx.lineWidth = layer.width;
+      ctx.shadowColor = `rgba(${layer.color},0.25)`;
+      ctx.shadowBlur = 10;
       ctx.stroke();
     });
+    ctx.shadowBlur = 0;
 
     t++;
     requestAnimationFrame(draw);
@@ -375,6 +385,7 @@ function initNavTracking() {
 
 /* ===== INIT ===== */
 document.addEventListener('DOMContentLoaded', () => {
+  initThemeToggle();
   renderSparklines();
   initWave();
   initBellCurve();
