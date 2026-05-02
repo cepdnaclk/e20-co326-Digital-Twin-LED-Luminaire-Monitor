@@ -160,3 +160,6 @@ The production UI will then serve the updated app from `http://localhost:5173`.
 - If a container does not start, check logs with `docker compose logs <service-name>`.
 - If ports `3000`, `1880`, or `8086` are already in use, stop the conflicting process or change the port mappings in `docker/docker-compose.yml`.
 - InfluxDB is configured as 2.x with initial setup enabled. Admin token is `root-token`.
+
+
+## [Project Report](/docs/report/CO326_Project_Report_Group06.pdf)
